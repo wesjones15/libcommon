@@ -49,3 +49,13 @@ Consumers: libsms-assets (`Be`; its J3D name table stays there as `NameTable`) a
 libpikmin-assets (`Cursor` as `Reader`; vectors, counts and `readString` stay there as
 `ReaderExt`). Not migrated: libssbm-assets' `Dat` readers (relocation-aware, string errors)
 and the small `Option`-returning helpers in libsms `skeleton.rs` and libssbm `sms.rs`.
+
+## `audio::afc`
+
+AFC ADPCM for Pikmin and Sunshine (4-bit and 2-bit frames, bank waves, the 16-pair predictor
+table). `Overflow` makes the one real difference explicit: the DSP saturates (bank waves, so
+`decode_wave` clamps) while the CPU stream decoder (`Jac_Decode_ADPCM`) truncates to 16 bits.
+Consumers: libsms-assets (bank waves clamp, streams wrap) and libpikmin-assets (bank waves
+clamp; streams currently clamp too, which differs from the decomp on overflow; change
+`OVERFLOW` in `sound/stream.rs` to `Wrap` when that is wanted). Melee's DSP-ADPCM is a
+different format and stays in libssbm-assets.
