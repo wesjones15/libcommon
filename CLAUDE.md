@@ -3,6 +3,7 @@
 Read `../CLAUDE.md` and `../AGENTS.md` first.
 This crate contains game-independent Rust primitives used by libsms/libpikmin/libssbm.
 No game data, simulation, graphics API dependencies or host-specific types.
+Texture decoding is shared in `texture::gx`; libssbm-assets still has its own (see README).
 Prefer small extractions with real consumers over unused general frameworks.
 Keep GX disk codes distinct from native-view ABI codes; they differ for clamp/repeat.
 Test shared behavior and affected consumers with `cargo test --release`.

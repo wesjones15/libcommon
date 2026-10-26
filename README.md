@@ -22,3 +22,18 @@ Run `cargo test --release` here, then each changed consumer's release tests.
 Keep behavior-preserving extraction and source-specific regression tests together.
 Game-specific particle formats, emission rules, clocks and simulation belong in their
 game libraries. No extracted assets or platform/Unity types belong in this crate.
+
+## `texture::gx`
+
+GX texture decoding to RGBA8 (`GxFormat`, `decode`, plus `rgb565`/`rgb5a3`/`ia8` for palette
+entries): I4/I8/IA4/IA8, RGB565, RGB5A3, RGBA8, C4/C8/C14X2 (palette passed in, out-of-range
+indices decode transparent), CMPR and Z8. Channel expansion replicates high bits as the
+hardware does; intensity formats fill all four channels.
+
+Consumers: libsms-assets and libpikmin-assets (each keeps its own format numbering and error
+type and maps to `GxFormat`). Their pixel hashes over pseudo-random data are pinned in each
+crate's `decoded_pixels_match_baseline` test and were recorded before the move.
+
+Not yet migrated: libssbm-assets expands 5/6/3-bit channels by `v * 255 / max` rather than bit
+replication, so some values differ by 1 (5-bit 13 gives 106, hardware gives 107). Moving it
+changes its decoded pixels, so it waits for a deliberate decision, not a silent swap.

@@ -5,6 +5,8 @@
 //! Mirror reflects the entire RGBA texel: quadrant alpha masks assemble exactly
 //! like their color channels, without extra opacity multiplication.
 
+pub mod gx;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Wrap {
     Clamp,
