@@ -59,3 +59,15 @@ Consumers: libsms-assets (bank waves clamp, streams wrap) and libpikmin-assets (
 clamp; streams currently clamp too, which differs from the decomp on overflow; change
 `OVERFLOW` in `sound/stream.rs` to `Wrap` when that is wanted). Melee's DSP-ADPCM is a
 different format and stays in libssbm-assets.
+
+## `anim`
+
+`hermite` / `hermite_s`: the cubic Hermite curve between two keys, with tangents in value per
+time unit. Consumers keep their key formats, tangent units, loop rules and timing:
+libsms (J3D tracks, JPA key frames) and libssbm (fobj tracks, the Sunshine rig reader) call it
+with their own tangents and match their old results bit for bit (pinned in each crate);
+libpikmin's `.anm` (tangents per second at 30 fps) and model clips sum in a different order, so
+they match to f32 rounding, not bit for bit (checked against copies of the old formulas here).
+
+Not shared: transform building. libpikmin's `srt_matrix` is a port of `makeSRT` and libsms and
+libssbm use glam's ZYX Euler conversion; they are one-liners with different roots.
