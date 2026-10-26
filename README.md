@@ -85,3 +85,19 @@ extracted models before the move (59 and 58 textures, `tests/tev_bakes.rs`, skip
 `assets/`), and both still produce them hash for hash. The shared combiner also handles the
 compare ops libpikmin's old one lacked; none of its shipped materials use them. The viewers'
 GLSL interpreters are separate and unchanged.
+
+## `disc`
+
+GameCube disc images: plain ISO/GCM and CISO (`open_image`, `image_from`, `ReadAt`), the
+validated file system table (`Disc`, `DiscFile`, `find`, `paths_under`, `read_file`,
+`read_range`) and the DOL (`read_dol`). Damaged images and tables are `DiscError`s, never
+panics or out-of-range reads; unsafe names (`..`, `/`, `\`, `:`), duplicate paths and bad
+directory extents are refused, and names that aren't UTF-8 (a few Shift-JIS parm backups on
+Pikmin's disc) are listed lossily. `disc::synthetic` builds in-memory discs and CISOs for tests.
+
+Consumers: libpikmin-assets (case-insensitive `files/`-relative lookup, `read_dol`),
+libsms (`extract::gcm`, errors mapped to `ExtractError`) and libssbm-assets (accepts only Melee
+GALE01 revision 2, keeps its 64 MiB read budget and name-keyed map). Which game a disc must be,
+which files an extractor wants and Yaz0/RARC (Sunshine's archives) stay with the games.
+Before the move, each library's reader was fingerprinted over its real disc (every path, size
+and content hash, plus Pikmin's DOL): Pikmin, both Sunshine regions and Melee come out identical.

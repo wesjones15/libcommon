@@ -5,5 +5,6 @@
 pub mod anim;
 pub mod audio;
 pub mod binary;
+pub mod disc;
 pub mod tev;
 pub mod texture;
