@@ -71,3 +71,17 @@ they match to f32 rounding, not bit for bit (checked against copies of the old f
 
 Not shared: transform building. libpikmin's `srt_matrix` is a port of `makeSRT` and libsms and
 libssbm use glam's ZYX Euler conversion; they are one-liners with different roots.
+
+## `tev`
+
+GX TEV stage arithmetic for CPU evaluators: `Regs` (PREV and REG0..2), `konst`, `color_in`,
+`alpha_in`, and `combine_color` / `combine_alpha` (add, subtract and the compare ops, with
+bias, scale and clamping). Texture reads, rasterized color and material interpretation stay
+with each game's material reader. `texture::sample_rgba8_bilinear` is the matching CPU
+sampler, built on `Wrap::index`.
+
+Consumers: libpikmin-present and libsms-present. Each pinned every baked texture of its real
+extracted models before the move (59 and 58 textures, `tests/tev_bakes.rs`, skipped without
+`assets/`), and both still produce them hash for hash. The shared combiner also handles the
+compare ops libpikmin's old one lacked; none of its shipped materials use them. The viewers'
+GLSL interpreters are separate and unchanged.

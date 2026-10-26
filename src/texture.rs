@@ -95,9 +95,117 @@ pub fn sample_rgba8_nearest(
     Some(pixels[start..start + 4].try_into().unwrap())
 }
 
+/// GX-style bilinear filtering of row-major RGBA8 at `(u, v)` in 0..1 texture space, each axis
+/// addressed independently, returning channels in 0..1. Texel centers sit half a texel in, and
+/// every one of the four neighbors is addressed on its own, so filtering is seamless across
+/// repeat and mirror seams. `None` for invalid dimensions, short buffers or nonfinite UVs.
+pub fn sample_rgba8_bilinear(
+    width: u32,
+    height: u32,
+    pixels: &[u8],
+    wrap: [Wrap; 2],
+    u: f32,
+    v: f32,
+) -> Option<[f32; 4]> {
+    let bytes = (width as usize)
+        .checked_mul(height as usize)?
+        .checked_mul(4)?;
+    if width == 0 || height == 0 || pixels.len() < bytes || !u.is_finite() || !v.is_finite() {
+        return None;
+    }
+    let texel = |x: i64, y: i64| {
+        let (x, y) = (wrap[0].index(x, width), wrap[1].index(y, height));
+        let o = (y * width as usize + x) * 4;
+        let p = &pixels[o..o + 4];
+        [p[0], p[1], p[2], p[3]].map(|c| c as f32 / 255.0)
+    };
+    let (x, y) = (u * width as f32 - 0.5, v * height as f32 - 0.5);
+    let (x0, y0) = (x.floor(), y.floor());
+    let (fx, fy) = (x - x0, y - y0);
+    let (x0, y0) = (x0 as i64, y0 as i64);
+    let (a, b, c, d) = (texel(x0, y0), texel(x0 + 1, y0), texel(x0, y0 + 1), texel(x0 + 1, y0 + 1));
+    Some(std::array::from_fn(|i| {
+        let top = a[i] + (b[i] - a[i]) * fx;
+        let bottom = c[i] + (d[i] - c[i]) * fx;
+        top + (bottom - top) * fy
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// libpikmin-present's sampler before it moved here (its own `fix` per wrap code).
+    fn old_pikmin(img: (u32, u32, &[u8]), wrap: [u8; 2], u: f32, v: f32) -> [f32; 4] {
+        let (w, h) = (img.0 as i32, img.1 as i32);
+        let fix = |i: i32, n: i32, mode: u8| match mode {
+            1 => i.clamp(0, n - 1),
+            2 => {
+                let p = i.rem_euclid(2 * n);
+                if p < n { p } else { 2 * n - 1 - p }
+            }
+            _ => i.rem_euclid(n),
+        };
+        let texel = |x: i32, y: i32| {
+            let (x, y) = (fix(x, w, wrap[0]), fix(y, h, wrap[1]));
+            let o = (y * w + x) as usize * 4;
+            let p = &img.2[o..o + 4];
+            [p[0], p[1], p[2], p[3]].map(|c| c as f32 / 255.0)
+        };
+        let (x, y) = (u * w as f32 - 0.5, v * h as f32 - 0.5);
+        let (x0, y0) = (x.floor(), y.floor());
+        let (fx, fy) = (x - x0, y - y0);
+        let (x0, y0) = (x0 as i32, y0 as i32);
+        let (a, b, c, d) = (texel(x0, y0), texel(x0 + 1, y0), texel(x0, y0 + 1), texel(x0 + 1, y0 + 1));
+        std::array::from_fn(|i| {
+            let top = a[i] + (b[i] - a[i]) * fx;
+            let bottom = c[i] + (d[i] - c[i]) * fx;
+            top + (bottom - top) * fy
+        })
+    }
+
+    #[test]
+    fn bilinear_matches_the_old_sampler_bit_for_bit_in_every_wrap_mode() {
+        let mut s = 5u32;
+        let mut next = || {
+            s = s.wrapping_mul(1664525).wrapping_add(1013904223);
+            s >> 8
+        };
+        let (w, h) = (5u32, 3u32);
+        let pixels: Vec<u8> = (0..w * h * 4).map(|_| next() as u8).collect();
+        for host in [[0u8, 0], [1, 1], [2, 2], [0, 2], [1, 0]] {
+            let wrap = host.map(Wrap::from_host);
+            for _ in 0..500 {
+                let u = (next() % 6000) as f32 / 1000.0 - 2.5;
+                let v = (next() % 6000) as f32 / 1000.0 - 2.5;
+                let got = sample_rgba8_bilinear(w, h, &pixels, wrap, u, v).unwrap();
+                let want = old_pikmin((w, h, &pixels), host, u, v);
+                assert_eq!(got.map(f32::to_bits), want.map(f32::to_bits), "{host:?} {u} {v}");
+            }
+        }
+    }
+
+    #[test]
+    fn bilinear_blends_neighbors_across_seams_and_rejects_bad_input() {
+        // Two texels, black then white: the middle of the seam in repeat mode is 50% grey.
+        let pixels = [0, 0, 0, 255, 255, 255, 255, 255];
+        let at = |wrap, u| sample_rgba8_bilinear(2, 1, &pixels, [wrap, Wrap::Clamp], u, 0.5).unwrap();
+        assert_eq!(at(Wrap::Repeat, 0.0)[0], 0.5);
+        assert_eq!(at(Wrap::Clamp, 0.0)[0], 0.0);
+        assert_eq!(at(Wrap::Mirror, 0.0)[0], 0.0);
+        assert_eq!(at(Wrap::Mirror, 1.0)[0], 1.0);
+        assert_eq!(at(Wrap::Repeat, 1.0)[0], 0.5);
+        assert_eq!(at(Wrap::Clamp, 0.5)[0], 0.5);
+        assert_eq!(at(Wrap::Clamp, 0.5)[3], 1.0);
+        for (w, h, px, u, v) in [
+            (0, 1, &[0u8; 4][..], 0., 0.),
+            (1, 1, &[0u8; 3][..], 0., 0.),
+            (1, 1, &[0u8; 4][..], f32::NAN, 0.),
+            (1, 1, &[0u8; 4][..], 0., f32::INFINITY),
+        ] {
+            assert_eq!(sample_rgba8_bilinear(w, h, px, [Wrap::Clamp; 2], u, v), None);
+        }
+    }
 
     #[test]
     fn gx_and_host_codes_are_explicit_and_round_trip() {
