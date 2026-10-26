@@ -37,3 +37,15 @@ crate's `decoded_pixels_match_baseline` test and were recorded before the move.
 Not yet migrated: libssbm-assets expands 5/6/3-bit channels by `v * 255 / max` rather than bit
 replication, so some values differ by 1 (5-bit 13 gives 106, hardware gives 107). Moving it
 changes its decoded pixels, so it waits for a deliberate decision, not a silent swap.
+
+## `binary`
+
+Bounds-checked big-endian readers: `Be` (random access at absolute offsets) and `Cursor`
+(forward, with `seek`/`skip`/`align`). Reads never panic, including offsets that overflow
+`usize`; a failure is `Truncated { offset }` where the read began, and a failed cursor read
+leaves the position alone. Each consumer converts with `From<Truncated>` into its own error.
+
+Consumers: libsms-assets (`Be`; its J3D name table stays there as `NameTable`) and
+libpikmin-assets (`Cursor` as `Reader`; vectors, counts and `readString` stay there as
+`ReaderExt`). Not migrated: libssbm-assets' `Dat` readers (relocation-aware, string errors)
+and the small `Option`-returning helpers in libsms `skeleton.rs` and libssbm `sms.rs`.
