@@ -8,3 +8,4 @@ pub mod binary;
 pub mod disc;
 pub mod tev;
 pub mod texture;
+pub mod vr_arms;
