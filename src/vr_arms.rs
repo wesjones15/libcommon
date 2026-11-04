@@ -37,6 +37,9 @@ pub const DIR: &str = "vr_arms";
 /// A vertex counts as on the arm when this much of its weight hangs from the arm's joints.
 pub const MIN_WEIGHT: f32 = 0.5;
 
+/// [`Arm::vertex_map`]'s mark for a vertex nowhere near the arm.
+pub const COLLAPSED: u32 = u32::MAX;
+
 /// A skinned body as its view draws it.
 #[derive(Clone, Debug, Default)]
 pub struct Mesh {
@@ -122,6 +125,37 @@ impl Arm {
     /// (its posed world matrix, in the same space the view skins the body into).
     pub fn to_arm(&self, wrist_now: &[f32; 16]) -> [f32; 16] {
         inverse(&mul(wrist_now, &self.frame))
+    }
+
+    /// Where each of a mesh's `vertices` comes from in the arm's draw, for a view that draws the
+    /// arm from the body's own vertex buffer and index list (an indexed mesh shares a vertex
+    /// between kept and dropped triangles): a kept triangle's vertex is itself; any other next
+    /// to one is snapped onto a kept neighbour, so the seam's dropped triangles close up rather
+    /// than stretch; the rest are [`COLLAPSED`] (draw them at the origin, degenerate).
+    pub fn vertex_map(&self, triangles: &[[u32; 3]], vertices: usize) -> Vec<u32> {
+        let mut map = vec![COLLAPSED; vertices];
+        for &t in &self.triangles {
+            if let Some(tri) = triangles.get(t as usize) {
+                for &v in tri {
+                    if let Some(m) = map.get_mut(v as usize) {
+                        *m = v;
+                    }
+                }
+            }
+        }
+        let kept = map.clone();
+        let is_kept = |v: u32| kept.get(v as usize).is_some_and(|&m| m != COLLAPSED);
+        for tri in triangles {
+            let Some(&anchor) = tri.iter().find(|&&v| is_kept(v)) else { continue };
+            for &v in tri {
+                if let Some(m) = map.get_mut(v as usize)
+                    && *m == COLLAPSED
+                {
+                    *m = anchor;
+                }
+            }
+        }
+        map
     }
 
     /// For each of `count` triangles, whether it's kept.
@@ -770,6 +804,17 @@ mod tests {
         let hand_now = transform_point(&lift, [4.5, 0.0, 0.0]);
         let back = transform_point(&arm.to_arm(&wrist_now), hand_now);
         assert!(back.iter().all(|v| v.abs() < 1e-4), "{back:?}");
+    }
+
+    #[test]
+    fn shared_seam_vertices_snap_onto_the_arm() {
+        // Two triangles sharing an edge: (0 1 2) on the arm, (1 3 2) off it.
+        let tris = [[0, 1, 2], [1, 3, 2], [4, 5, 6]];
+        let arm = Arm { side: 0, elbow: 0, wrist: 0, frame: IDENTITY, triangles: vec![0] };
+        let map = arm.vertex_map(&tris, 7);
+        assert_eq!(&map[..3], &[0, 1, 2]);
+        assert!(map[3] == 1 || map[3] == 2, "{map:?}");
+        assert!(map[4..].iter().all(|&m| m == COLLAPSED));
     }
 
     #[test]
