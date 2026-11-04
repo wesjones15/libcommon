@@ -96,6 +96,12 @@ impl Side {
         let elbow = mesh.parents.get(wrist).copied().flatten()?;
         Some(Side { elbow, wrist })
     }
+
+    /// A rig whose whole arm is one joint off the body (no forearm joint: Pikmin's captains).
+    /// The arm is that joint's subtree; arm space's +z runs from the joint out to its vertices.
+    pub fn limb(joint: usize) -> Side {
+        Side { elbow: joint, wrist: joint }
+    }
 }
 
 /// One side's cut.
@@ -300,7 +306,9 @@ fn frame(mesh: &Mesh, side: Side) -> Option<[f32; 16]> {
         }
     }
     let centre = if n > 0 { scale(sum, 1.0 / n as f32) } else { wrist_at };
-    let forward = normalize(sub(wrist_at, elbow_at))?;
+    // A one-joint limb (a stubby arm on a single bone: Side::limb) points from its joint out to
+    // its own vertices.
+    let forward = if side.elbow == side.wrist { normalize(sub(centre, wrist_at))? } else { normalize(sub(wrist_at, elbow_at))? };
     let up = normalize(sub([0.0, 1.0, 0.0], scale(forward, forward[1])))
         .or_else(|| normalize(sub([0.0, 0.0, 1.0], scale(forward, forward[2]))))?;
     let right = cross(up, forward);
@@ -762,6 +770,18 @@ mod tests {
         let hand_now = transform_point(&lift, [4.5, 0.0, 0.0]);
         let back = transform_point(&arm.to_arm(&wrist_now), hand_now);
         assert!(back.iter().all(|v| v.abs() < 1e-4), "{back:?}");
+    }
+
+    #[test]
+    fn a_one_joint_limb_is_its_own_subtree() {
+        let m = figure();
+        let arms = cut("figure", &m, [Some(Side::limb(3)), None]);
+        let arm = arms.side(0).unwrap();
+        assert_eq!(arm.triangles, vec![6, 7]);
+        // The hand's middle at the origin, +z out along +x from its joint.
+        let to_arm = arm.to_arm(&m.bind[3]);
+        let tip = transform_point(&to_arm, [5.0, 0.0, 0.0]);
+        assert!(tip[2] > 0.4 && tip[0].abs() < 1e-4, "{tip:?}");
     }
 
     #[test]
