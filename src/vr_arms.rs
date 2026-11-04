@@ -8,9 +8,9 @@
 //!    vertex and triangle order its view draws the body.
 //! 2. [`cut`] keeps each triangle whose three corners all hang mostly (at least half) from a
 //!    side's forearm joint or below it, and finds that side's arm space ([`Arm::frame`]).
-//! 3. [`Arms::save`] writes the result into the extracted asset cache (`vr_arms/<name>.arms`,
-//!    plain text) on first run, beside the other derived files; [`Arms::load`] reads it back,
-//!    and a cut made for another vertex or triangle count is rejected.
+//! 3. [`Arms::load_or_cut`] reads the cut from the extracted asset cache (`vr_arms/<name>.arms`,
+//!    plain text), cutting and writing it first if it is missing: each core bakes every body this way on first run,
+//!    and a view reads them back the same way. A cut made for another vertex or triangle count is recut.
 //! 4. Each frame the view draws a side's kept triangles from the body's own skinned vertices,
 //!    taken into arm space by [`Arm::to_arm`] with the wrist joint's current matrix, and the
 //!    host puts arm space on the controller.
@@ -284,6 +284,18 @@ impl Arms {
     /// The cached cut called `name`, if there is one in this version.
     pub fn load(assets: &Path, name: &str) -> Option<Arms> {
         Arms::parse(&std::fs::read_to_string(Self::path(assets, name)).ok()?)
+    }
+
+    /// The one entry point for bakes and views alike: `mesh`'s cut from the cache when it's
+    /// there and fits, else cut now and cached (a cache from an older build, or a skin added
+    /// since first run). The bool is whether it was cut now.
+    pub fn load_or_cut(assets: &Path, name: &str, mesh: &Mesh, sides: [Option<Side>; 2]) -> (Arms, bool) {
+        if let Some(a) = Arms::load(assets, name).filter(|a| a.fits(mesh.positions.len(), mesh.triangles.len())) {
+            return (a, false);
+        }
+        let a = cut(name, mesh, sides);
+        let _ = a.save(assets);
+        (a, true)
     }
 }
 
