@@ -40,6 +40,60 @@ pub const MIN_WEIGHT: f32 = 0.5;
 /// [`Arm::vertex_map`]'s mark for a vertex nowhere near the arm.
 pub const COLLAPSED: u32 = u32::MAX;
 
+/// Where each of a mesh's `vertices` comes from in a draw that shows only the triangles `keep`
+/// marks, drawn from the body's own vertex buffer and index list (an indexed mesh shares a vertex
+/// between kept and dropped triangles): a kept triangle's vertex is itself; any other next to one
+/// is snapped onto a kept neighbour, so the seam's dropped triangles close up rather than
+/// stretch; the rest are [`COLLAPSED`] (draw them at one point, degenerate).
+pub fn keep_map(triangles: &[[u32; 3]], vertices: usize, keep: &[bool]) -> Vec<u32> {
+    let mut map = vec![COLLAPSED; vertices];
+    for (t, tri) in triangles.iter().enumerate() {
+        if !keep.get(t).copied().unwrap_or(false) {
+            continue;
+        }
+        for &v in tri {
+            if let Some(m) = map.get_mut(v as usize) {
+                *m = v;
+            }
+        }
+    }
+    let kept = map.clone();
+    let is_kept = |v: u32| kept.get(v as usize).is_some_and(|&m| m != COLLAPSED);
+    for tri in triangles {
+        let Some(&anchor) = tri.iter().find(|&&v| is_kept(v)) else { continue };
+        for &v in tri {
+            if let Some(m) = map.get_mut(v as usize)
+                && *m == COLLAPSED
+            {
+                *m = anchor;
+            }
+        }
+    }
+    map
+}
+
+/// The rest of the body for a VR host's first person, as a [`keep_map`]: every triangle that is
+/// on neither of `arms` (they're drawn on the controllers) nor on the head (the eye is inside it):
+/// a triangle goes with the head when any corner hangs at least [`MIN_WEIGHT`] from `head` or a
+/// joint below it. The torso, legs and upper arms stay, to be seen looking down or about.
+pub fn torso_map(mesh: &Mesh, arms: &Arms, head: usize) -> Vec<u32> {
+    let mut keep = vec![true; mesh.triangles.len()];
+    for a in &arms.arms {
+        for &t in &a.triangles {
+            if let Some(k) = keep.get_mut(t as usize) {
+                *k = false;
+            }
+        }
+    }
+    let head_set = mesh.subtree(head);
+    for (t, tri) in mesh.triangles.iter().enumerate() {
+        if tri.iter().any(|&v| mesh.weight_in(v as usize, &head_set) >= MIN_WEIGHT) {
+            keep[t] = false;
+        }
+    }
+    keep_map(&mesh.triangles, mesh.positions.len(), &keep)
+}
+
 /// A skinned body as its view draws it.
 #[derive(Clone, Debug, Default)]
 pub struct Mesh {
@@ -133,29 +187,7 @@ impl Arm {
     /// to one is snapped onto a kept neighbour, so the seam's dropped triangles close up rather
     /// than stretch; the rest are [`COLLAPSED`] (draw them at the origin, degenerate).
     pub fn vertex_map(&self, triangles: &[[u32; 3]], vertices: usize) -> Vec<u32> {
-        let mut map = vec![COLLAPSED; vertices];
-        for &t in &self.triangles {
-            if let Some(tri) = triangles.get(t as usize) {
-                for &v in tri {
-                    if let Some(m) = map.get_mut(v as usize) {
-                        *m = v;
-                    }
-                }
-            }
-        }
-        let kept = map.clone();
-        let is_kept = |v: u32| kept.get(v as usize).is_some_and(|&m| m != COLLAPSED);
-        for tri in triangles {
-            let Some(&anchor) = tri.iter().find(|&&v| is_kept(v)) else { continue };
-            for &v in tri {
-                if let Some(m) = map.get_mut(v as usize)
-                    && *m == COLLAPSED
-                {
-                    *m = anchor;
-                }
-            }
-        }
-        map
+        keep_map(triangles, vertices, &self.mask(triangles.len()))
     }
 
     /// For each of `count` triangles, whether it's kept.

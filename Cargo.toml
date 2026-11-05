@@ -5,4 +5,9 @@ edition = "2024"
 publish = false
 description = "Shared game-independent primitives for the GameCube character libraries"
 
+[features]
+# The sound output that follows the default device (audio::out), for cores that play sound.
+cpal = ["dep:cpal"]
+
 [dependencies]
+cpal = { version = "0.15", optional = true }
