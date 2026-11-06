@@ -6,6 +6,7 @@ pub mod anim;
 pub mod audio;
 pub mod binary;
 pub mod disc;
+pub mod scratch;
 pub mod tev;
 pub mod texture;
 pub mod vr_arms;
