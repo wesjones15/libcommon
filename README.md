@@ -101,3 +101,11 @@ GALE01 revision 2, keeps its 64 MiB read budget and name-keyed map). Which game 
 which files an extractor wants and Yaz0/RARC (Sunshine's archives) stay with the games.
 Before the move, each library's reader was fingerprinted over its real disc (every path, size
 and content hash, plus Pikmin's DOL): Pikmin, both Sunshine regions and Melee come out identical.
+
+## License and credits
+
+Original contributions by **wesleyasaurus** are dedicated to the public domain under
+[CC0 1.0 Universal](LICENSE), to the extent wesleyasaurus owns the relevant rights.
+Attribution for those contributions is appreciated but not required. Third-party software
+and original game content retain their respective rights and terms.
+See [CREDITS.md](CREDITS.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

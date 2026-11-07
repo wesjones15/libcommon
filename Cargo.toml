@@ -1,4 +1,5 @@
 [package]
+license = "CC0-1.0"
 name = "libcommon"
 version = "0.1.0"
 edition = "2024"
