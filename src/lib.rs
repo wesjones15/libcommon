@@ -8,6 +8,7 @@ pub mod binary;
 pub mod disc;
 pub mod ffi;
 pub mod scratch;
+pub mod strike_pose;
 pub mod tev;
 pub mod texture;
 pub mod vr_arms;
